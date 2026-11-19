@@ -1,0 +1,50 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "type": "shell",
+            "label": "Build Emergency Evacuation Simulator (g++)",
+            "command": "g++",
+            "args": [
+                "-O2",
+                "-Wall",
+                "-std=c++11",
+                "${workspaceFolder}/main.cpp",
+                "${workspaceFolder}/Building.cpp",
+                "${workspaceFolder}/Person.cpp",
+                "${workspaceFolder}/Fire.cpp",
+                "${workspaceFolder}/Pathfinding.cpp",
+                "${workspaceFolder}/Camera.cpp",
+                "${workspaceFolder}/Simulation.cpp",
+                "-o",
+                "${workspaceFolder}/EmergencyEvacuationSimulator.exe",
+                "-lfreeglut",
+                "-lopengl32",
+                "-lglu32",
+                "-lwinmm",
+                "-lgdi32"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "detail": "Compiler: g++ with FreeGLUT and OpenGL libraries"
+        },
+        {
+            "type": "shell",
+            "label": "Run Simulator (build.bat)",
+            "command": "${workspaceFolder}/build.bat",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "none",
+            "detail": "Runs the automatic batch compilation and launcher"
+        }
+    ]
+}

@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D AI-Based Emergency Evacuation Simulator - Web Preview</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+        body { background: #0a0c10; color: #fff; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; height: 100vh; width: 100vw; }
+        canvas { display: block; width: 100vw; height: 100vh; }
+        
+        /* Top Header */
+        #header-bar {
+            position: absolute; top: 0; left: 0; width: 100%; height: 46px;
+            background: rgba(10, 15, 26, 0.92); border-bottom: 1.5px solid #1a5c9e;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 20px; z-index: 10;
+        }
+        #header-title { font-size: 16px; font-weight: 700; letter-spacing: 1px; color: #38bdf8; text-transform: uppercase; }
+        #status-pill {
+            padding: 4px 14px; border-radius: 4px; font-size: 12px; font-weight: 700;
+            letter-spacing: 0.5px; border: 1.5px solid #22c55e; background: rgba(34, 197, 94, 0.15); color: #4ade80;
+        }
+        #status-pill.paused { border-color: #eab308; background: rgba(234, 179, 8, 0.15); color: #facc15; }
+
+        /* Left Telemetry Panel */
+        #telemetry-panel {
+            position: absolute; top: 60px; left: 20px; width: 330px;
+            background: rgba(8, 14, 24, 0.88); border: 1.5px solid rgba(56, 189, 248, 0.4);
+            border-radius: 8px; padding: 16px 18px; z-index: 10; backdrop-filter: blur(8px);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        }
+        #telemetry-title {
+            font-size: 13px; font-weight: 700; color: #38bdf8; letter-spacing: 0.8px;
+            padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 12px;
+        }
+        .metric-row { display: flex; justify-content: space-between; margin-bottom: 9px; font-size: 13px; font-family: monospace; }
+        .metric-label { color: #94a3b8; }
+        .metric-val { font-weight: 700; color: #f8fafc; }
+        .metric-val.green { color: #4ade80; }
+        .metric-val.cyan { color: #38bdf8; }
+        .metric-val.red { color: #f87171; }
+        .metric-val.orange { color: #fb923c; }
+
+        /* Trapped Alert Banner */
+        #alert-banner {
+            position: absolute; top: 60px; left: 50%; transform: translateX(-50%);
+            width: auto; min-width: 500px; padding: 10px 24px; text-align: center;
+            background: rgba(185, 28, 28, 0.9); border: 2px solid #ef4444; border-radius: 6px;
+            color: #fee2e2; font-weight: 700; font-size: 14px; z-index: 10; display: none;
+            animation: pulse-red 1s infinite alternate; backdrop-filter: blur(4px);
+        }
+        @keyframes pulse-red {
+            from { box-shadow: 0 0 10px rgba(239, 68, 68, 0.5); }
+            to { box-shadow: 0 0 25px rgba(239, 68, 68, 0.9); }
+        }
+
+        /* Success Banner */
+        #success-banner {
+            position: absolute; top: 60px; left: 50%; transform: translateX(-50%);
+            padding: 10px 24px; text-align: center;
+            background: rgba(22, 101, 52, 0.9); border: 2px solid #22c55e; border-radius: 6px;
+            color: #dcfce7; font-weight: 700; font-size: 14px; z-index: 10; display: none;
+        }
+
+        /* Bottom Controls Bar */
+        #bottom-bar {
+            position: absolute; bottom: 0; left: 0; width: 100%; height: 38px;
+            background: rgba(8, 12, 20, 0.92); border-top: 1px solid rgba(56, 189, 248, 0.3);
+            display: flex; align-items: center; justify-content: center; gap: 18px;
+            font-size: 12px; color: #cbd5e1; z-index: 10;
+        }
+        .btn-key {
+            background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.4);
+            color: #38bdf8; padding: 2px 7px; border-radius: 4px; font-weight: 700; font-family: monospace;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .btn-key:hover { background: rgba(56, 189, 248, 0.35); }
+    </style>
+</head>
+<body>
+    <div id="header-bar">
+        <div id="header-title">3D AI-Based Emergency Evacuation Simulator (Web Preview)</div>
+        <div id="status-pill">STATUS: SIMULATING</div>
+    </div>
+
+    <div id="telemetry-panel">
+        <div id="telemetry-title">EVACUATION TELEMETRY</div>
+        <div class="metric-row"><span class="metric-label">Simulation Time:</span><span class="metric-val" id="val-time">00:00.0 s</span></div>
+        <div class="metric-row"><span class="metric-label">Total Evacuees:</span><span class="metric-val" id="val-total">16</span></div>
+        <div class="metric-row"><span class="metric-label">Evacuated Safely:</span><span class="metric-val green" id="val-evac">0 (0.0%)</span></div>
+        <div class="metric-row"><span class="metric-label">Currently Moving:</span><span class="metric-val cyan" id="val-moving">16</span></div>
+        <div class="metric-row"><span class="metric-label">Trapped / Blocked:</span><span class="metric-val red" id="val-trapped">0</span></div>
+        <div class="metric-row"><span class="metric-label">Active Fire Hazards:</span><span class="metric-val orange" id="val-hazards">1</span></div>
+        <div class="metric-row"><span class="metric-label">Operational Exits:</span><span class="metric-val green" id="val-exits">4 / 4</span></div>
+        <div class="metric-row"><span class="metric-label">Camera View:</span><span class="metric-val" id="val-cam">3D Perspective</span></div>
+        <div class="metric-row"><span class="metric-label">Evacuation Routes:</span><span class="metric-val green" id="val-routes">VISIBLE</span></div>
+    </div>
+
+    <div id="alert-banner">[ ! ] CRITICAL ALERT: EVACUEE(S) TRAPPED - ALL ROUTES BLOCKED BY HAZARD!</div>
+    <div id="success-banner">[ * ] EVACUATION COMPLETE: ALL CIVILIANS SAFELY ESCAPED!</div>
+
+    <div id="bottom-bar">
+        <span><button class="btn-key" onclick="togglePause()">SPACE</button> Pause/Resume</span>
+        <span><button class="btn-key" onclick="restartSimulation()">R</button> Restart</span>
+        <span><button class="btn-key" onclick="addHazard()">H</button> Add Fire Hazard</span>
+        <span><button class="btn-key" onclick="toggleCamera()">C</button> Camera Mode</span>
+        <span><button class="btn-key" onclick="toggleRoutes()">P</button> Path Lines</span>
+        <span><button class="btn-key" onclick="zoomCam(-4)">+</button>/<button class="btn-key" onclick="zoomCam(4)">-</button> Zoom</span>
+        <span style="color:#64748b;">(Left-drag mouse to orbit 3D view)</span>
+    </div>
+
+    <!-- Three.js from official cloud CDN for instant WebGL 3D execution -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // --- 1. Three.js Scene, Camera, Renderer ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0a0c12);
+        scene.fog = new THREE.FogExp2(0x0a0c12, 0.008);
+
+        const aspect = window.innerWidth / window.innerHeight;
+        const camera = new THREE.PerspectiveCamera(45, aspect, 0.5, 500);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        // Lighting
+        const hemiLight = new THREE.HemisphereLight(0x404552, 0x141824, 0.7);
+        scene.add(hemiLight);
+
+        const dirLight = new THREE.DirectionalLight(0xe2e8f0, 0.85);
+        dirLight.position.set(20, 45, 25);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        scene.add(dirLight);
+
+        // Camera orbit state
+        let camDistance = 42;
+        let camYaw = 45 * Math.PI / 180;
+        let camPitch = 38 * Math.PI / 180;
+        let isTopDown = false;
+        let isMouseDown = false;
+        let lastMouseX = 0, lastMouseY = 0;
+
+        function updateCamera() {
+            if (!isTopDown) {
+                camera.position.x = camDistance * Math.cos(camPitch) * Math.sin(camYaw);
+                camera.position.y = camDistance * Math.sin(camPitch);
+                camera.position.z = camDistance * Math.cos(camPitch) * Math.cos(camYaw);
+                camera.lookAt(0, 0, 0);
+            } else {
+                camera.position.set(0, 50, 0);
+                camera.lookAt(0, 0, -0.0001);
+            }
+        }
+        updateCamera();
+
+        // Mouse Controls
+        window.addEventListener('mousedown', e => {
+            if (e.target.tagName !== 'BUTTON') {
+                isMouseDown = true;
+                lastMouseX = e.clientX;
+                lastMouseY = e.clientY;
+            }
+        });
+        window.addEventListener('mouseup', () => isMouseDown = false);
+        window.addEventListener('mousemove', e => {
+            if (isMouseDown && !isTopDown) {
+                const dx = e.clientX - lastMouseX;
+                const dy = e.clientY - lastMouseY;
+                camYaw += dx * 0.008;
+                camPitch += dy * 0.008;
+                camPitch = Math.max(0.18, Math.min(Math.PI / 2 - 0.08, camPitch));
+                lastMouseX = e.clientX;
+                lastMouseY = e.clientY;
+                updateCamera();
+            }
+        });
+        window.addEventListener('wheel', e => {
+            camDistance += e.deltaY * 0.03;
+            camDistance = Math.max(15, Math.min(75, camDistance));
+            updateCamera();
+        });
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // --- 2. Building Environment Layout ---
+        const wallMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.7 });
+        const wallTrimMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.5 });
+        const floorMat = new THREE.MeshStandardMaterial({ color: 0x1e2430, roughness: 0.8 });
+        const corridorMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.6 });
+
+        // Outer Ground
+        const groundGeo = new THREE.BoxGeometry(60, 0.4, 60);
+        const groundMesh = new THREE.Mesh(groundGeo, new THREE.MeshStandardMaterial({ color: 0x0f172a }));
+        groundMesh.position.y = -0.25;
+        groundMesh.receiveShadow = true;
+        scene.add(groundMesh);
+
+        // Corridors (Central Crossway)
+        const corrZ = new THREE.Mesh(new THREE.BoxGeometry(4.8, 0.05, 40), corridorMat);
+        corrZ.position.y = 0.01;
+        corrZ.receiveShadow = true;
+        scene.add(corrZ);
+
+        const corrX = new THREE.Mesh(new THREE.BoxGeometry(40, 0.05, 4.8), corridorMat);
+        corrX.position.y = 0.01;
+        corrX.receiveShadow = true;
+        scene.add(corrX);
+
+        // Room Floors
+        const roomFloors = [
+            { x: -11, z: -11, w: 17, d: 17, col: 0x1e293b }, // Office A
+            { x: 11,  z: -11, w: 17, d: 17, col: 0x1b2838 }, // Server Lab B
+            { x: -11, z: 11,  w: 17, d: 17, col: 0x2b2420 }, // Cafeteria C
+            { x: 11,  z: 11,  w: 17, d: 17, col: 0x1e2e28 }  // Research D
+        ];
+        roomFloors.forEach(r => {
+            const m = new THREE.Mesh(new THREE.BoxGeometry(r.w, 0.04, r.d), new THREE.MeshStandardMaterial({ color: r.col }));
+            m.position.set(r.x, 0.01, r.z);
+            m.receiveShadow = true;
+            scene.add(m);
+        });
+
+        // Walls Data (AABB)
+        const walls = [];
+        const wallHeight = 2.6;
+
+        function addWall(x1, z1, x2, z2, color = 0x64748b) {
+            const minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
+            const minZ = Math.min(z1, z2), maxZ = Math.max(z1, z2);
+            const w = maxX - minX || 0.4;
+            const d = maxZ - minZ || 0.4;
+            const cx = (minX + maxX) / 2;
+            const cz = (minZ + maxZ) / 2;
+
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, wallHeight, d), new THREE.MeshStandardMaterial({ color }));
+            mesh.position.set(cx, wallHeight / 2, cz);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            scene.add(mesh);
+
+            // Wall Cap Trim
+            const cap = new THREE.Mesh(new THREE.BoxGeometry(w + 0.06, 0.1, d + 0.06), wallTrimMat);
+            cap.position.set(cx, wallHeight + 0.05, cz);
+            scene.add(cap);
+
+            walls.push({ minX: cx - w/2, maxX: cx + w/2, minZ: cz - d/2, maxZ: cz + d/2 });
+        }
+
+        // Perimeter Walls (Leaving openings for North, South, East, West Exits)
+        addWall(-20, -20, -2, -20); addWall(2, -20, 20, -20); // North
+        addWall(-20, 20, -2, 20);   addWall(2, 20, 20, 20);   // South
+        addWall(-20, -20, -20, -2); addWall(-20, 2, -20, 20); // West
+        addWall(20, -20, 20, -2);   addWall(20, 2, 20, 20);   // East
+
+        // Interior Quadrant Walls with Doorways
+        // NW Room (Office A)
+        addWall(-2.5, -20, -2.5, -12); addWall(-2.5, -9, -2.5, -2.5);
+        addWall(-20, -2.5, -12, -2.5); addWall(-9, -2.5, -2.5, -2.5);
+
+        // NE Room (Server Lab B)
+        addWall(2.5, -20, 2.5, -12); addWall(2.5, -9, 2.5, -2.5);
+        addWall(2.5, -2.5, 9, -2.5);  addWall(12, -2.5, 20, -2.5);
+
+        // SW Room (Cafeteria C)
+        addWall(-2.5, 2.5, -2.5, 9); addWall(-2.5, 12, -2.5, 20);
+        addWall(-20, 2.5, -12, 2.5); addWall(-9, 2.5, -2.5, 2.5);
+
+        // SE Room (Research D)
+        addWall(2.5, 2.5, 2.5, 9); addWall(2.5, 12, 2.5, 20);
+        addWall(2.5, 2.5, 9, 2.5);  addWall(12, 2.5, 20, 2.5);
+
+        // Structural corner pillars
+        addWall(-2.7, -2.7, -2.3, -2.3, 0x334155);
+        addWall(2.3, -2.7, 2.7, -2.3, 0x334155);
+        addWall(-2.7, 2.3, -2.3, 2.7, 0x334155);
+        addWall(2.3, 2.3, 2.7, 2.7, 0x334155);
+
+        // Exits Definition
+        const exits = [
+            { id: 1, name: "NORTH EXIT", x: 0, z: -20, mesh: null, isBlocked: false },
+            { id: 2, name: "SOUTH EXIT", x: 0, z: 20, mesh: null, isBlocked: false },
+            { id: 3, name: "EAST EXIT", x: 20, z: 0, mesh: null, isBlocked: false },
+            { id: 4, name: "WEST EXIT", x: -20, z: 0, mesh: null, isBlocked: false }
+        ];
+
+        exits.forEach(ex => {
+            const padMat = new THREE.MeshBasicMaterial({ color: 0x22c55e });
+            const pad = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.08, 1.2), padMat);
+            pad.position.set(ex.x, 0.04, ex.z);
+            scene.add(pad);
+            ex.mesh = pad;
+
+            // Overhead illuminated EXIT sign
+            const signMat = new THREE.MeshBasicMaterial({ color: 0x4ade80 });
+            const sign = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.35, 0.2), signMat);
+            sign.position.set(ex.x, wallHeight - 0.3, ex.z);
+            scene.add(sign);
+        });
+
+        // --- 3. Navigation Grid & A* Pathfinding ---
+        const GRID_SIZE = 84;
+        const CELL_SIZE = 0.5;
+        const MIN_COORD = -21;
+        const staticGrid = new Uint8Array(GRID_SIZE * GRID_SIZE);
+        const dynamicGrid = new Uint8Array(GRID_SIZE * GRID_SIZE);
+
+        function worldToGrid(wx, wz) {
+            let gx = Math.floor((wx - MIN_COORD) / CELL_SIZE);
+            let gz = Math.floor((wz - MIN_COORD) / CELL_SIZE);
+            return { gx: Math.max(0, Math.min(GRID_SIZE - 1, gx)), gz: Math.max(0, Math.min(GRID_SIZE - 1, gz)) };
+        }
+        function gridToWorld(gx, gz) {
+            return { wx: MIN_COORD + (gx + 0.5) * CELL_SIZE, wz: MIN_COORD + (gz + 0.5) * CELL_SIZE };
+        }
+
+        // Rasterize walls into grid
+        walls.forEach(w => {
+            const margin = 0.35;
+            const minG = worldToGrid(w.minX - margin, w.minZ - margin);
+            const maxG = worldToGrid(w.maxX + margin, w.maxZ + margin);
+            for (let gz = minG.gz; gz <= maxG.gz; gz++) {
+                for (let gx = minG.gx; gx <= maxG.gx; gx++) {
+                    staticGrid[gz * GRID_SIZE + gx] = 1; // Wall
+                }
+            }
+        });
+
+        // Building outer bounds
+        for (let gz = 0; gz < GRID_SIZE; gz++) {
+            for (let gx = 0; gx < GRID_SIZE; gx++) {
+                const { wx, wz } = gridToWorld(gx, gz);
+                if (Math.abs(wx) > 20 || Math.abs(wz) > 20) {
+                    const atExit = (Math.abs(wx) <= 1.8 && (wz <= -19.8 || wz >= 19.8)) ||
+                                   (Math.abs(wz) <= 1.8 && (wx <= -19.8 || wx >= 19.8));
+                    if (!atExit) staticGrid[gz * GRID_SIZE + gx] = 1;
+                }
+            }
+        }
+        dynamicGrid.set(staticGrid);
+
+        // A* Pathfinding Implementation
+        function aStar(startPos, goalPos) {
+            const start = worldToGrid(startPos.x, startPos.z);
+            const goal = worldToGrid(goalPos.x, goalPos.z);
+
+            if (dynamicGrid[goal.gz * GRID_SIZE + goal.gx] !== 0) {
+                // Find nearby open cell
+                let found = false;
+                for (let r = 1; r <= 3 && !found; r++) {
+                    for (let dz = -r; dz <= r && !found; dz++) {
+                        for (let dx = -r; dx <= r && !found; dx++) {
+                            const nx = goal.gx + dx, nz = goal.gz + dz;
+                            if (nx >= 0 && nx < GRID_SIZE && nz >= 0 && nz < GRID_SIZE && dynamicGrid[nz * GRID_SIZE + nx] === 0) {
+                                goal.gx = nx; goal.gz = nz; found = true;
+                            }
+                        }
+                    }
+                }
+                if (!found) return null;
+            }
+
+            const openSet = [{ gx: start.gx, gz: start.gz, g: 0, f: Math.hypot(start.gx - goal.gx, start.gz - goal.gz) }];
+            const gScore = new Float32Array(GRID_SIZE * GRID_SIZE).fill(1e9);
+            const parent = new Int32Array(GRID_SIZE * GRID_SIZE).fill(-1);
+            const closed = new Uint8Array(GRID_SIZE * GRID_SIZE);
+
+            gScore[start.gz * GRID_SIZE + start.gx] = 0;
+
+            const dirX = [0, 1, 0, -1, 1, 1, -1, -1];
+            const dirZ = [-1, 0, 1, 0, -1, 1, 1, -1];
+            const cost = [1, 1, 1, 1, 1.414, 1.414, 1.414, 1.414];
+
+            while (openSet.length > 0) {
+                let bestIdx = 0;
+                for (let i = 1; i < openSet.length; i++) {
+                    if (openSet[i].f < openSet[bestIdx].f) bestIdx = i;
+                }
+                const cur = openSet.splice(bestIdx, 1)[0];
+                const curIdx = cur.gz * GRID_SIZE + cur.gx;
+
+                if (cur.gx === goal.gx && cur.gz === goal.gz) {
+                    // Reconstruct path
+                    const path = [];
+                    let idx = curIdx;
+                    while (idx !== -1) {
+                        const gx = idx % GRID_SIZE;
+                        const gz = Math.floor(idx / GRID_SIZE);
+                        const { wx, wz } = gridToWorld(gx, gz);
+                        path.push(new THREE.Vector3(wx, 0.08, wz));
+                        idx = parent[idx];
+                    }
+                    path.reverse();
+                    path[path.length - 1].set(goalPos.x, 0.08, goalPos.z);
+                    return path;
+                }
+
+                if (closed[curIdx]) continue;
+                closed[curIdx] = 1;
+
+                for (let i = 0; i < 8; i++) {
+                    const nx = cur.gx + dirX[i];
+                    const nz = cur.gz + dirZ[i];
+                    if (nx < 0 || nx >= GRID_SIZE || nz < 0 || nz >= GRID_SIZE) continue;
+                    if (dynamicGrid[nz * GRID_SIZE + nx] !== 0) continue;
+
+                    // Corner-cutting check
+                    if (i >= 4) {
+                        if (dynamicGrid[cur.gz * GRID_SIZE + nx] !== 0 || dynamicGrid[nz * GRID_SIZE + cur.gx] !== 0) continue;
+                    }
+
+                    const nextIdx = nz * GRID_SIZE + nx;
+                    if (closed[nextIdx]) continue;
+
+                    const tentG = cur.g + cost[i];
+                    if (tentG < gScore[nextIdx]) {
+                        gScore[nextIdx] = tentG;
+                        parent[nextIdx] = curIdx;
+                        const h = Math.hypot(nx - goal.gx, nz - goal.gz);
+                        openSet.push({ gx: nx, gz: nz, g: tentG, f: tentG + h });
+                    }
+                }
+            }
+            return null; // Trapped
+        }
+
+        // --- 4. Fire Hazards Simulation ---
+        const hazards = [
+            { id: 1, x: 0, z: -5, r: 2.2, active: true },
+            { id: 2, x: 7, z: 0, r: 2.3, active: false },
+            { id: 3, x: -2.5, z: -10.5, r: 2.2, active: false },
+            { id: 4, x: 0, z: 8, r: 2.3, active: false },
+            { id: 5, x: -9, z: 0, r: 2.3, active: false }
+        ];
+
+        const fireLight = new THREE.PointLight(0xff5500, 2.5, 12);
+        fireLight.position.set(0, 1.2, -5);
+        scene.add(fireLight);
+
+        // Particle system for fire
+        const fireParticleCount = 180;
+        const particleGeo = new THREE.BufferGeometry();
+        const particlePos = new Float32Array(fireParticleCount * 3);
+        const particleCol = new Float32Array(fireParticleCount * 3);
+        const particleVel = [];
+
+        for (let i = 0; i < fireParticleCount; i++) {
+            particleVel.push({
+                vx: (Math.random() - 0.5) * 0.4,
+                vy: 1.2 + Math.random() * 1.8,
+                vz: (Math.random() - 0.5) * 0.4,
+                life: Math.random(),
+                maxLife: 0.8 + Math.random() * 0.8,
+                hazardIdx: 0
+            });
+            particlePos[i*3] = 0; particlePos[i*3+1] = 0.1; particlePos[i*3+2] = -5;
+            particleCol[i*3] = 1; particleCol[i*3+1] = 0.8; particleCol[i*3+2] = 0.1;
+        }
+        particleGeo.setAttribute('position', new THREE.BufferAttribute(particlePos, 3));
+        particleGeo.setAttribute('color', new THREE.BufferAttribute(particleCol, 3));
+
+        const particleMat = new THREE.PointsMaterial({
+            size: 0.35, vertexColors: true, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending
+        });
+        const particleSystem = new THREE.Points(particleGeo, particleMat);
+        scene.add(particleSystem);
+
+        // Fire danger rings
+        hazards.forEach(h => {
+            const ringGeo = new THREE.RingGeometry(h.r - 0.15, h.r, 32);
+            const ringMat = new THREE.MeshBasicMaterial({ color: 0xef4444, side: THREE.DoubleSide, transparent: true, opacity: 0.85 });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            ring.rotation.x = -Math.PI / 2;
+            ring.position.set(h.x, 0.05, h.z);
+            scene.add(ring);
+            h.ringMesh = ring;
+            ring.visible = h.active;
+        });
+
+        function updateHazardsInGrid() {
+            dynamicGrid.set(staticGrid);
+            let activeCount = 0;
+            hazards.forEach(h => {
+                if (!h.active) return;
+                activeCount++;
+                const safety = h.r + 0.6;
+                const minG = worldToGrid(h.x - safety, h.z - safety);
+                const maxG = worldToGrid(h.x + safety, h.z + safety);
+                for (let gz = minG.gz; gz <= maxG.gz; gz++) {
+                    for (let gx = minG.gx; gx <= maxG.gx; gx++) {
+                        const { wx, wz } = gridToWorld(gx, gz);
+                        if (Math.hypot(wx - h.x, wz - h.z) <= safety) {
+                            dynamicGrid[gz * GRID_SIZE + gx] = 2; // Fire
+                        }
+                    }
+                }
+            });
+
+            // Update exit status
+            exits.forEach(ex => {
+                ex.isBlocked = hazards.some(h => h.active && Math.hypot(ex.x - h.x, ex.z - h.z) < h.r + 0.8);
+                if (ex.mesh) ex.mesh.material.color.setHex(ex.isBlocked ? 0xef4444 : 0x22c55e);
+            });
+        }
+        updateHazardsInGrid();
+
+        // --- 5. Human Characters & Animation ---
+        const people = [];
+        const spawnPoints = [
+            [-14, -14], [-10, -16], [-8, -12], [-16, -8], // Office A
+            [12, -14],  [8, -16],   [15, -10], [9, -7],   // Server Lab B
+            [-14, 14],  [-8, 15],   [-15, 8],  [-10, 9],  // Cafeteria C
+            [12, 14],   [8, 16],    [14, 9],   [10, 11]   // Research D
+        ];
+
+        const bluePalettes = [0x2563eb, 0x0284c7, 0x1d4ed8, 0x0f766e, 0x1e40af, 0x38bdf8];
+
+        function createPerson(id, x, z) {
+            const group = new THREE.Group();
+
+            // Legs
+            const legMat = new THREE.MeshStandardMaterial({ color: 0x1e293b });
+            const leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.45, 0.14), legMat);
+            leftLeg.position.set(-0.11, 0.22, 0);
+            group.add(leftLeg);
+
+            const rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.45, 0.14), legMat);
+            rightLeg.position.set(0.11, 0.22, 0);
+            group.add(rightLeg);
+
+            // Torso (Blue Uniform)
+            const shirtMat = new THREE.MeshStandardMaterial({ color: bluePalettes[id % bluePalettes.length], roughness: 0.6 });
+            const torso = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.55, 0.2), shirtMat);
+            torso.position.y = 0.72;
+            torso.castShadow = true;
+            group.add(torso);
+
+            // Arms
+            const leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.42, 0.1), shirtMat);
+            leftArm.position.set(-0.21, 0.72, 0);
+            group.add(leftArm);
+
+            const rightArm = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.42, 0.1), shirtMat);
+            rightArm.position.set(0.21, 0.72, 0);
+            group.add(rightArm);
+
+            // Head
+            const skinMat = new THREE.MeshStandardMaterial({ color: 0xfbbf24, roughness: 0.8 });
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.22, 0.2), skinMat);
+            head.position.y = 1.1;
+            group.add(head);
+
+            // Trapped Icon (Red Warning Marker)
+            const trapIcon = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.35, 4), new THREE.MeshBasicMaterial({ color: 0xef4444 }));
+            trapIcon.position.y = 1.6;
+            trapIcon.rotation.z = Math.PI;
+            trapIcon.visible = false;
+            group.add(trapIcon);
+
+            // Path Line
+            const pathMat = new THREE.LineBasicMaterial({ color: 0x4ade80, linewidth: 2 });
+            const pathGeo = new THREE.BufferGeometry();
+            const pathLine = new THREE.Line(pathGeo, pathMat);
+            scene.add(pathLine);
+
+            scene.add(group);
+
+            return {
+                id, group, leftLeg, rightLeg, leftArm, rightArm, trapIcon, pathLine,
+                x, z, speed: 1.8 + (id % 5) * 0.1,
+                state: 'EVACUATING', // EVACUATING, EVACUATED, TRAPPED
+                path: [], waypointIdx: 0,
+                animPhase: Math.random() * 10
+            };
+        }
+
+        spawnPoints.forEach((pt, i) => {
+            people.push(createPerson(i + 1, pt[0], pt[1]));
+        });
+
+        // Recalculate routes for all active people
+        function recalculateAllPeopleRoutes() {
+            updateHazardsInGrid();
+            let trappedCount = 0;
+
+            people.forEach(p => {
+                if (p.state === 'EVACUATED') return;
+
+                let bestPath = null;
+                let bestDist = 1e9;
+
+                exits.forEach(ex => {
+                    if (ex.isBlocked) return;
+                    const route = aStar({ x: p.x, z: p.z }, { x: ex.x, z: ex.z });
+                    if (route) {
+                        let len = 0;
+                        for (let j = 1; j < route.length; j++) len += route[j].distanceTo(route[j-1]);
+                        if (len < bestDist) { bestDist = len; bestPath = route; }
+                    }
+                });
+
+                if (bestPath && bestPath.length > 0) {
+                    p.path = bestPath;
+                    p.waypointIdx = 0;
+                    p.state = 'EVACUATING';
+                    p.trapIcon.visible = false;
+                } else {
+                    p.path = [];
+                    p.state = 'TRAPPED';
+                    p.trapIcon.visible = true;
+                    trappedCount++;
+                }
+            });
+
+            document.getElementById('alert-banner').style.display = trappedCount > 0 ? 'block' : 'none';
+        }
+        recalculateAllPeopleRoutes();
+
+        // --- 6. Simulation Loop & Physics ---
+        let simulationTime = 0;
+        let isPaused = false;
+        let showRoutes = true;
+        let clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = Math.min(clock.getDelta(), 0.05);
+
+            if (!isPaused) {
+                simulationTime += dt;
+
+                // Animate Fire Particles
+                const positions = particleSystem.geometry.attributes.position.array;
+                const colors = particleSystem.geometry.attributes.color.array;
+                const activeHazards = hazards.filter(h => h.active);
+
+                if (activeHazards.length > 0) {
+                    fireLight.position.set(activeHazards[0].x, 1.2, activeHazards[0].z);
+                    fireLight.intensity = 2.2 + Math.sin(simulationTime * 12) * 0.4;
+                }
+
+                for (let i = 0; i < fireParticleCount; i++) {
+                    const vel = particleVel[i];
+                    vel.life += dt / vel.maxLife;
+
+                    if (vel.life >= 1.0) {
+                        vel.life = 0;
+                        vel.hazardIdx = Math.floor(Math.random() * activeHazards.length);
+                        const h = activeHazards[vel.hazardIdx] || activeHazards[0];
+                        const ang = Math.random() * Math.PI * 2;
+                        const r = Math.random() * h.r * 0.65;
+                        positions[i*3] = h.x + Math.cos(ang) * r;
+                        positions[i*3+1] = 0.05;
+                        positions[i*3+2] = h.z + Math.sin(ang) * r;
+                    } else {
+                        positions[i*3] += vel.vx * dt;
+                        positions[i*3+1] += vel.vy * dt;
+                        positions[i*3+2] += vel.vz * dt;
+
+                        if (vel.life < 0.4) {
+                            colors[i*3] = 1.0; colors[i*3+1] = 0.85; colors[i*3+2] = 0.1;
+                        } else if (vel.life < 0.75) {
+                            colors[i*3] = 0.95; colors[i*3+1] = 0.35; colors[i*3+2] = 0.05;
+                        } else {
+                            colors[i*3] = 0.3; colors[i*3+1] = 0.3; colors[i*3+2] = 0.3;
+                        }
+                    }
+                }
+                particleSystem.geometry.attributes.position.needsUpdate = true;
+                particleSystem.geometry.attributes.color.needsUpdate = true;
+
+                // Update People Movement & Steering
+                let evacuatedCount = 0;
+                let trappedCount = 0;
+                let movingCount = 0;
+
+                people.forEach(p => {
+                    if (p.state === 'EVACUATED') {
+                        evacuatedCount++;
+                        p.group.visible = false;
+                        p.pathLine.visible = false;
+                        return;
+                    }
+                    if (p.state === 'TRAPPED') {
+                        trappedCount++;
+                        p.trapIcon.position.y = 1.6 + Math.sin(simulationTime * 8) * 0.08;
+                        return;
+                    }
+
+                    movingCount++;
+
+                    // Waypoint Following
+                    if (p.waypointIdx < p.path.length) {
+                        const target = p.path[p.waypointIdx];
+                        const dx = target.x - p.x;
+                        const dz = target.z - p.z;
+                        const dist = Math.hypot(dx, dz);
+
+                        if (dist < 0.35) {
+                            p.waypointIdx++;
+                        } else {
+                            // Direction vector
+                            let dirX = dx / dist;
+                            let dirZ = dz / dist;
+
+                            // Crowd separation
+                            people.forEach(other => {
+                                if (other === p || other.state === 'EVACUATED') return;
+                                const sepX = p.x - other.x;
+                                const sepZ = p.z - other.z;
+                                const d = Math.hypot(sepX, sepZ);
+                                if (d > 0.001 && d < 0.65) {
+                                    const w = (1 - d / 0.65) * 1.2;
+                                    dirX += (sepX / d) * w;
+                                    dirZ += (sepZ / d) * w;
+                                }
+                            });
+
+                            const len = Math.hypot(dirX, dirZ);
+                            dirX /= len; dirZ /= len;
+
+                            p.x += dirX * p.speed * dt;
+                            p.z += dirZ * p.speed * dt;
+
+                            p.group.position.set(p.x, 0, p.z);
+                            p.group.rotation.y = Math.atan2(dirX, dirZ);
+
+                            // Walking Limb Animation
+                            p.animPhase += dt * p.speed * 6.5;
+                            const swing = Math.sin(p.animPhase) * 0.45;
+                            p.leftLeg.rotation.x = swing;
+                            p.rightLeg.rotation.x = -swing;
+                            p.leftArm.rotation.x = -swing * 0.8;
+                            p.rightArm.rotation.x = swing * 0.8;
+                        }
+                    } else {
+                        p.state = 'EVACUATED';
+                    }
+
+                    // Render Route Lines
+                    if (showRoutes && p.path.length > 0 && p.waypointIdx < p.path.length) {
+                        const pts = [new THREE.Vector3(p.x, 0.08, p.z)];
+                        for (let j = p.waypointIdx; j < p.path.length; j++) pts.push(p.path[j]);
+                        p.pathLine.geometry.setFromPoints(pts);
+                        p.pathLine.visible = true;
+                    } else {
+                        p.pathLine.visible = false;
+                    }
+                });
+
+                // Update Telemetry Panel
+                const mins = Math.floor(simulationTime / 60);
+                const secs = (simulationTime % 60).toFixed(1);
+                document.getElementById('val-time').innerText = `${mins.toString().padStart(2, '0')}:${secs.padStart(4, '0')} s`;
+                document.getElementById('val-evac').innerText = `${evacuatedCount} (${(evacuatedCount/people.length*100).toFixed(1)}%)`;
+                document.getElementById('val-moving').innerText = movingCount;
+                document.getElementById('val-trapped').innerText = trappedCount;
+                document.getElementById('val-hazards').innerText = hazards.filter(h => h.active).length;
+
+                const safeExits = exits.filter(e => !e.isBlocked).length;
+                document.getElementById('val-exits').innerText = `${safeExits} / ${exits.length}`;
+
+                if (evacuatedCount === people.length) {
+                    document.getElementById('success-banner').style.display = 'block';
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // --- 7. Interactive Control Functions ---
+        function togglePause() {
+            isPaused = !isPaused;
+            const pill = document.getElementById('status-pill');
+            pill.innerText = isPaused ? 'STATUS: PAUSED' : 'STATUS: SIMULATING';
+            pill.className = isPaused ? 'paused' : '';
+        }
+
+        function restartSimulation() {
+            simulationTime = 0;
+            isPaused = false;
+            document.getElementById('status-pill').innerText = 'STATUS: SIMULATING';
+            document.getElementById('status-pill').className = '';
+            document.getElementById('success-banner').style.display = 'none';
+
+            hazards.forEach((h, i) => {
+                h.active = (i === 0);
+                if (h.ringMesh) h.ringMesh.visible = h.active;
+            });
+
+            people.forEach((p, i) => {
+                p.x = spawnPoints[i][0];
+                p.z = spawnPoints[i][1];
+                p.group.position.set(p.x, 0, p.z);
+                p.group.visible = true;
+                p.state = 'EVACUATING';
+            });
+
+            recalculateAllPeopleRoutes();
+        }
+
+        function addHazard() {
+            const next = hazards.find(h => !h.active);
+            if (next) {
+                next.active = true;
+                if (next.ringMesh) next.ringMesh.visible = true;
+                recalculateAllPeopleRoutes();
+            }
+        }
+
+        function toggleCamera() {
+            isTopDown = !isTopDown;
+            document.getElementById('val-cam').innerText = isTopDown ? 'Top-Down View' : '3D Perspective';
+            updateCamera();
+        }
+
+        function toggleRoutes() {
+            showRoutes = !showRoutes;
+            document.getElementById('val-routes').innerText = showRoutes ? 'VISIBLE' : 'HIDDEN';
+            if (!showRoutes) {
+                people.forEach(p => p.pathLine.visible = false);
+            }
+        }
+
+        function zoomCam(delta) {
+            camDistance = Math.max(15, Math.min(75, camDistance + delta));
+            updateCamera();
+        }
+
+        // Keyboard Event Handlers
+        window.addEventListener('keydown', e => {
+            if (e.code === 'Space') { e.preventDefault(); togglePause(); }
+            else if (e.key === 'r' || e.key === 'R') restartSimulation();
+            else if (e.key === 'h' || e.key === 'H') addHazard();
+            else if (e.key === 'c' || e.key === 'C') toggleCamera();
+            else if (e.key === 'p' || e.key === 'P') toggleRoutes();
+            else if (e.key === '+' || e.key === '=') zoomCam(-3);
+            else if (e.key === '-' || e.key === '_') zoomCam(3);
+            else if (e.key === 'ArrowLeft') { camYaw -= 0.08; updateCamera(); }
+            else if (e.key === 'ArrowRight') { camYaw += 0.08; updateCamera(); }
+            else if (e.key === 'ArrowUp') { camPitch = Math.min(Math.PI/2 - 0.08, camPitch + 0.08); updateCamera(); }
+            else if (e.key === 'ArrowDown') { camPitch = Math.max(0.18, camPitch - 0.08); updateCamera(); }
+        });
+    </script>
+</body>
+</html>

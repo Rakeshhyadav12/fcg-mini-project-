@@ -1,0 +1,16 @@
+# Build artifacts
+*.o
+*.obj
+*.exe
+bin/
+obj/
+
+# Code::Blocks temp files
+*.layout
+*.depend
+
+# Logs and system files
+*.log
+.DS_Store
+Thumbs.db
+test.txt
